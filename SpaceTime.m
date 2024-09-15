@@ -5,6 +5,8 @@ classdef SpaceTime < handle
         
         type = 'Unknown';
         v_tot;
+        t_correction = true;
+        hasMass = false;
         
     end
     
@@ -52,27 +54,46 @@ classdef SpaceTime < handle
         % Initialize
         function obj = SpaceTime(t,r,theta,phi,v_t,v_r,v_theta,v_phi,varargin)
             
-            if (nargin>8 && ~isempty(varargin{1}))
+            if ( nargin>8 && ~isempty(varargin{1}) )
                 obj.v_tot = varargin{1};
             else
                 obj.v_tot = obj.c;
             end
+            if ( nargin>9 && ~isempty(varargin{2}) )
+                obj.type = varargin{2};
+            end
             if ( isempty(v_t) )
-                % v_t is not specified at init and needs to be computed
-                [g__t_t,           ~,              ~,            ~, ...
-                              g__r_r,              ~,            ~, ...
-                                      g__theta_theta,            ~, ...
-                                                        g__phi_phi] = obj.metric(r,theta);
-                v_t = sqrt( (obj.v_tot^2 - g__r_r.*v_r.*v_r - g__phi_phi.*v_phi.*v_phi - g__theta_theta.*v_theta.*v_theta)./g__t_t );
+                v_t = nan*v_r;
             end
             
             obj.y = [v_t v_r v_theta v_phi t r theta phi];
+            
+            obj.hasMass = any(strcmp(fieldnames(obj),'r_s'));
             
         end
         
         % Integrate derivative
         function obj = integrate(obj,h)
             
+            idxVt = isnan(obj.y(:,1)) & ~isnan(obj.y(:,2));
+            if ( any(idxVt) )
+                
+                s = obj.y2states(obj.y);
+                
+                % v_t is not specified at init and needs to be computed
+                [g__t_t,           ~,              ~,            ~, ...
+                              g__r_r,              ~,            ~, ...
+                                      g__theta_theta,            ~, ...
+                                                        g__phi_phi] = obj.metric(s.r,s.theta);
+                % vTot^2 = A*vA^2 + B*vB^2 + C*vC^2 + D*vD^2
+                % vTot^2 - B*vB^2 - C*vC^2 - D*vD^2 =  A*vA^2
+                % vA^2 = (vTot^2 - B*vB^2 - C*vC^2 - D*vD^2) / A
+                v_t2 = (obj.v_tot^2 - g__r_r.*s.v_r.^2 - g__phi_phi.*s.v_phi.^2 - g__theta_theta.*s.v_theta.^2) ./ g__t_t;
+                s.v_t(idxVt) = sqrt( v_t2(idxVt) );
+                obj.y = obj.states2y(s);
+                
+            end
+                
             k1 = obj.f(obj.y);
             k2 = obj.f(obj.y+0.5*h*k1);
             k3 = obj.f(obj.y+0.5*h*k2);
@@ -80,31 +101,39 @@ classdef SpaceTime < handle
             y = obj.y + h/6*(k1+2*k2+2*k3+k4);
             
             s = obj.y2states(y);
+            if ( obj.hasMass )
+                s.r(s.r < obj.r_s) = obj.r_s; % clip to Schwartzchild radius r_s
+            end
             [g__t_t,           ~,              ~,            ~, ...
                           g__r_r,              ~,            ~, ...
                                   g__theta_theta,            ~, ...
                                                     g__phi_phi] = obj.metric(s.r,s.theta);
-            % vTot^2 = A*(vA*s)^2 + B*(vB*s)^2 + C*(vC*s)^2 + D*(vD*s)^2
-            % vTot^2 = s^2(A*vA^2 + B*vB^2 + C*vC^2 + D*vD^2)
-            % s^2(A*vA^2 + B*vB^2 + C*vC^2 + D*vD^2) - vTot^2 = 0
-            v2 = g__t_t.*s.v_t.^2 + g__r_r.*s.v_r.^2 +  g__theta_theta.*s.v_theta.^2 + g__phi_phi.*s.v_phi.^2;
-            s2a = 1-1e-9;
-            s2b = 1+1e-9;
-            v_tot2 = obj.v_tot^2;
-            arr = [s2a*v2-v_tot2 s2b*v2-v_tot2];
-            frac = -arr(:,1)./(arr(:,2)-arr(:,1));
-            s2 = s2a + frac.*(s2b-s2a);
-            idx = s2>0;
-            s1 = sqrt(s2(idx));
-            s.v_t(idx) = s1.*s.v_t(idx);
-            s.v_r(idx) = s1.*s.v_r(idx);
-            s.v_theta(idx) = s1.*s.v_theta(idx);
-            s.v_phi(idx) = s1.*s.v_phi(idx);
-            s.v_t(~idx) = nan;
-            s.v_r(~idx) = nan;
-            s.v_theta(~idx) = nan;
-            s.v_phi(~idx) = nan;
-            
+            if ( obj.t_correction )
+                % vTot^2 = A*(vA*s)^2 + B*vB^2 + C*vC^2 + D*vD^2
+                % vTot^2 - B*vB^2 - C*vC^2 - D*vD^2 = s^2(A*vA^2)
+                % s^2 = (vTot^2 - B*vB^2 - C*vC^2 - D*vD^2) / A*vA^2 
+                s2 = (obj.v_tot^2 - g__r_r.*s.v_r.^2 - g__theta_theta.*s.v_theta.^2 - g__phi_phi.*s.v_phi.^2) ./ (g__t_t.*s.v_t.^2);
+                s1 = sqrt(s2);
+                if ( ~isreal(s1) )
+                    disp('what!');
+                end
+                obj.t_correction = false;
+            else
+                % vTot^2 = A*vA^2 + B*(s*vB)^2 + C*(s*vC)^2 + D*(s*vD)^2
+                % vTot^2 - A*vA^2 = s^2(B*vB^2 + C*vC^2 + D*vD^2)
+                % s^2 = (vTot^2 - A*vA^2 ) / (B*vB^2 + C*vC^2 + D*vD^2) 
+                s2 = (obj.v_tot^2 - g__t_t.*s.v_t.^2) ./ (g__r_r.*s.v_r.^2 + g__theta_theta.*s.v_theta.^2 + g__phi_phi.*s.v_phi.^2);
+                s1 = sqrt(s2);
+                if ( ~isreal(s1) )
+                    disp('wha!');
+                end
+                obj.t_correction = true;
+            end
+            s.v_t = s1.*s.v_t;
+            s.v_r = s1.*s.v_r;
+            s.v_theta = s1.*s.v_theta;
+            s.v_phi = s1.*s.v_phi;
+
             obj.y = obj.states2y(s);
  
         end
@@ -146,7 +175,6 @@ classdef SpaceTime < handle
         % Compute derivative
         function dY = f(obj,y)
 
-            % y = [v_r, v_t, v_phi, v_theta, r, t, phi, theta]
             s = SpaceTime.y2states(y);
 
             v_v = [    s.v_t.*s.v_t     s.v_t.*s.v_r     s.v_t.*s.v_theta     s.v_t.*s.v_phi ...
@@ -169,7 +197,7 @@ classdef SpaceTime < handle
     % No member variables
     methods (Static, Access = public)
 
-        % Create strcut from states 
+        % Create states from y 
         function s = y2states(y)
 
             s.v_t = y(:,1);
@@ -185,6 +213,7 @@ classdef SpaceTime < handle
         
         function y = states2y(s)
 
+            % y = [v_t, v_r, v_theta, v_phi, t, y, theta, phi]
             y = [s.v_t s.v_r s.v_theta s.v_phi s.t s.r s.theta s.phi];
               
         end

@@ -1,9 +1,10 @@
 close all;
 clear all;
 
+% set empty for time, set 0 for light
 v_tot = [];
 
-r = [10 15 20]';
+r = [9 10 11]';
 t = 0*ones(size(r));
 theta = pi/2*ones(size(r));
 phi = 0*ones(size(r));
@@ -13,7 +14,7 @@ v = 0.1;
 v_phi = v./r;
 
 % Minkowski
-minkST = SpaceTimeMinkowski(t,r,theta,phi,[],v_r,v_theta,v_phi,v_tot);
+minkST = SpaceTimeMinkowski(t,r,theta,phi,[],v_r,v_theta,v_phi,v_tot,'Mnk');
 
 mink.y = minkST.y;
 mink.s = SpaceTime.y2states(mink.y);
@@ -23,11 +24,23 @@ mink.H = plot([x x]',[y y]','bo-');
 axis equal;
 
 % Schwarzschild
-r_s_s = [0 .002 0.004];
+if ( minkST.v_tot>0 )
+    r_s_s = [0 .002 0.01];
+    a_s = [-20 0 20];
+    iLoop = 200000;
+    h = 0.002;
+else
+    % p_s = 3 * r_s / 2
+    % r_s = 2 * p_s / 3
+    r_s_s = [0 1*r(1)/3 2*r(1)/3];
+    a_s = [-5 0 5];
+    iLoop = 200000;
+    h = 0.002;
+end
 schw = [];
 hold on;
 for iN = 1:length(r_s_s)
-    schwST(iN) = SpaceTimeSchwarzs(t,r,theta,phi,[],v_r,v_theta,v_phi,v_tot);
+    schwST(iN) = SpaceTimeSchwarzs(t,r,theta,phi,[],v_r,v_theta,v_phi,v_tot,sprintf('Sch%02d',iN));
     schwST(iN).r_s = r_s_s(iN);
     schw(iN).y = schwST(iN).y;
     schw(iN).s = SpaceTime.y2states(schw(iN).y);
@@ -36,12 +49,15 @@ end
 hold off;
 
 % Kerr
-a_s = [-20 0 20];
 kerr = [];
 hold on;
 for iN = 1:length(a_s)
-    kerrST(iN) = SpaceTimeKerr(t,r,theta,phi,[],v_r,v_theta,v_phi,v_tot);
-    kerrST(iN).r_s = r_s_s(2);
+    kerrST(iN) = SpaceTimeKerr(t,r,theta,phi,[],v_r,v_theta,v_phi,v_tot,sprintf('Ker%02d',iN));
+    if ( minkST.v_tot>0 )
+        kerrST(iN).r_s = r_s_s(2);
+    else
+        kerrST(iN).r_s = r_s_s(3);
+    end
     kerrST(iN).a = a_s(iN);
     kerr(iN).y = kerrST(iN).y;
     kerr(iN).s = SpaceTime.y2states(kerr(iN).y);
@@ -49,9 +65,8 @@ for iN = 1:length(a_s)
 end
 hold off;
 
-h = 0.001;
 iSkip = 1000;
-for iLoop = 1:100000
+for iLoop = 1:iLoop
     
     minkST = minkST.integrate(h);
     for iN = 1:length(r_s_s)

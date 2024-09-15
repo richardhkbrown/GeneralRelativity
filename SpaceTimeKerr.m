@@ -12,9 +12,11 @@ classdef SpaceTimeKerr < SpaceTimeSchwarzs
         
         % Initialize
         function obj = SpaceTimeKerr(varargin)
-            
+
+            if ( nargin<10 )
+                varargin{10} = 'Kerr';
+            end
             obj@SpaceTimeSchwarzs(varargin{:});
-            obj.type = 'Kerr';
             
         end
         

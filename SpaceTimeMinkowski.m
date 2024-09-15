@@ -6,9 +6,10 @@ classdef SpaceTimeMinkowski < SpaceTime
         % Initialize
         function obj = SpaceTimeMinkowski(varargin)
             
-            
+            if ( nargin<10 )
+                varargin{10} = 'Minkowski';
+            end
             obj@SpaceTime(varargin{:});
-            obj.type = 'Minkowski';
             
         end
 

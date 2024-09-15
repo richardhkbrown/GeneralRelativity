@@ -13,8 +13,10 @@ classdef SpaceTimeSchwarzs < SpaceTimeMinkowski
         % Initialize
         function obj = SpaceTimeSchwarzs(varargin)
             
+            if ( nargin<10 )
+                varargin{10} = 'Schwarzschild';
+            end
             obj@SpaceTimeMinkowski(varargin{:});
-            obj.type = 'Schwarzschild';
             
         end
 
