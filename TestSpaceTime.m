@@ -4,7 +4,11 @@ clear all;
 % set empty for time, set 0 for light
 v_tot = [];
 
-r = [9 10 11]';
+if ( isempty(v_tot) )
+    r = [8 10 12]';
+else
+    r = [1 1.0666]';
+end
 t = 0*ones(size(r));
 theta = pi/2*ones(size(r));
 phi = 0*ones(size(r));
@@ -24,7 +28,7 @@ mink.H = plot([x x]',[y y]','bo-');
 axis equal;
 
 % Schwarzschild
-if ( minkST.v_tot>0 )
+if ( isempty(v_tot) )
     r_s_s = [0 .002 0.01];
     a_s = [-20 0 20];
     iLoop = 200000;
@@ -33,7 +37,7 @@ else
     % p_s = 3 * r_s / 2
     % r_s = 2 * p_s / 3
     r_s_s = [0 1*r(1)/3 2*r(1)/3];
-    a_s = [-5 0 5];
+    a_s = [-0.1 0 0.1];
     iLoop = 200000;
     h = 0.002;
 end
@@ -53,7 +57,7 @@ kerr = [];
 hold on;
 for iN = 1:length(a_s)
     kerrST(iN) = SpaceTimeKerr(t,r,theta,phi,[],v_r,v_theta,v_phi,v_tot,sprintf('Ker%02d',iN));
-    if ( minkST.v_tot>0 )
+    if ( isempty(v_tot) )
         kerrST(iN).r_s = r_s_s(2);
     else
         kerrST(iN).r_s = r_s_s(3);
@@ -61,7 +65,7 @@ for iN = 1:length(a_s)
     kerrST(iN).a = a_s(iN);
     kerr(iN).y = kerrST(iN).y;
     kerr(iN).s = SpaceTime.y2states(kerr(iN).y);
-    kerr(iN).H = plot([x x]',[y y]','r.-');
+    kerr(iN).H = plot([x x]',[y y]','r.');
 end
 hold off;
 
